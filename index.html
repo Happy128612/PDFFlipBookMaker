@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Video to PDF Converter (Mobile Playback Engine)</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    :root {
+      --bg-color: #0f172a;
+      --card-bg: #1e293b;
+      --accent: #38bdf8;
+      --accent-hover: #0284c7;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text);
+      margin: 0;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .container {
+      max-width: 900px;
+      width: 100%;
+    }
+
+    h1 {
+      text-align: center;
+      margin-bottom: 1rem;
+      font-size: 1.4rem;
+    }
+
+    .card {
+      background-color: var(--card-bg);
+      border-radius: 12px;
+      padding: 1.2rem;
+      margin-bottom: 1rem;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 0.8rem;
+      margin-top: 1rem;
+    }
+
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    label {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    input, select, button {
+      padding: 0.6rem;
+      border-radius: 6px;
+      border: 1px solid #334155;
+      background-color: #0f172a;
+      color: var(--text);
+      font-size: 0.9rem;
+      box-sizing: border-box;
+    }
+
+    button {
+      background-color: var(--accent);
+      color: #0f172a;
+      font-weight: bold;
+      border: none;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    button:hover {
+      background-color: var(--accent-hover);
+      color: #fff;
+    }
+
+    button:disabled {
+      background-color: #475569;
+      color: var(--text-muted);
+      cursor: not-allowed;
+    }
+
+    video {
+      width: 100%;
+      max-height: 220px;
+      border-radius: 8px;
+      margin-top: 1rem;
+      display: none;
+      background-color: #000;
+    }
+
+    .progress {
+      height: 8px;
+      background-color: #334155;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-top: 1rem;
+      display: none;
+    }
+
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background-color: var(--accent);
+      transition: width 0.1s;
+    }
+
+    .status-text {
+      font-size: 0.85rem;
+      color: var(--accent);
+      margin-top: 0.5rem;
+      text-align: center;
+      word-break: break-word;
+    }
+
+    #pdfDownloadBtn {
+      display: none;
+      width: 100%;
+      margin-top: 10px;
+      background-color: #10b981;
+      color: #ffffff;
+      padding: 0.8rem;
+    }
+
+    .pdf-preview-wrapper {
+      margin-top: 15px;
+      background: #ffffff;
+      border-radius: 8px;
+      border: 1px solid #e5e7eb;
+      overflow: hidden;
+      display: none;
+    }
+
+    #pdfPreview {
+      width: 100%;
+      height: 380px;
+      border: none;
+      background: #ffffff;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <h1>Video to PDF Converter</h1>
+
+    <div class="card">
+      <div class="input-group">
+        <label for="videoInput">Select Video File</label>
+        <input type="file" id="videoInput" accept="video/*">
+      </div>
+
+      <video id="videoPlayer" controls preload="auto" playsinline muted crossorigin="anonymous"></video>
+
+      <div class="controls">
+        <div class="input-group">
+          <label for="extractionMode">Extraction Mode</label>
+          <select id="extractionMode">
+            <option value="interval">Time Interval (ms)</option>
+            <option value="count">Total Number of Frames</option>
+          </select>
+        </div>
+
+        <div class="input-group" id="intervalGroup">
+          <label for="intervalMs">Interval (ms)</label>
+          <input type="number" id="intervalMs" value="1000" min="100" step="100">
+        </div>
+
+        <div class="input-group" id="countGroup" style="display: none;">
+          <label for="totalFrames">Total Frames</label>
+          <input type="number" id="totalFrames" value="10" min="1" step="1">
+        </div>
+
+        <div class="input-group">
+          <label for="pageSize">PDF Size</label>
+          <select id="pageSize">
+            <option value="a6" selected>A6 (105 × 148 mm)</option>
+            <option value="a4">A4 (210 × 297 mm)</option>
+            <option value="letter">Letter (8.5 × 11 in)</option>
+          </select>
+        </div>
+
+        <div class="input-group">
+          <label for="leftMarginInput">Left Margin (in)</label>
+          <input type="number" id="leftMarginInput" value="0.5" min="0" step="0.1">
+        </div>
+
+        <div class="input-group">
+          <label for="scaleMode">Scaling Mode</label>
+          <select id="scaleMode">
+            <option value="cover" selected>Scale & Crop (Fill)</option>
+            <option value="stretch">Stretch to Bounds</option>
+          </select>
+        </div>
+
+        <div class="input-group" style="justify-content: flex-end; grid-column: 1 / -1;">
+          <button id="convertBtn" disabled>Play & Record to PDF</button>
+        </div>
+      </div>
+
+      <div class="progress" id="progressContainer">
+        <div class="progress-bar" id="progressBar"></div>
+      </div>
+      <div class="status-text" id="statusText"></div>
+    </div>
+
+    <button id="pdfDownloadBtn">Download Generated PDF</button>
+
+    <div class="card pdf-preview-wrapper" id="pdfPreviewWrapper">
+      <h2 style="margin-top:0; color:#1e293b; font-size:1.1rem;">PDF Preview</h2>
+      <embed id="pdfPreview" type="application/pdf">
+    </div>
+  </div>
+
+  <canvas id="hiddenCanvas" style="display: none;"></canvas>
+
+  <script>
+    const { jsPDF } = window.jspdf;
+
+    const videoInput = document.getElementById('videoInput');
+    const videoPlayer = document.getElementById('videoPlayer');
+    const convertBtn = document.getElementById('convertBtn');
+    
+    // UI Elements
+    const extractionMode = document.getElementById('extractionMode');
+    const intervalGroup = document.getElementById('intervalGroup');
+    const countGroup = document.getElementById('countGroup');
+    const intervalMsInput = document.getElementById('intervalMs');
+    const totalFramesInput = document.getElementById('totalFrames');
+    const pageSizeSelect = document.getElementById('pageSize');
+    const leftMarginInput = document.getElementById('leftMarginInput');
+    const scaleModeSelect = document.getElementById('scaleMode');
+    
+    // Canvas & UI Status Elements
+    const hiddenCanvas = document.getElementById('hiddenCanvas');
+    const ctx = hiddenCanvas.getContext('2d', { willReadFrequently: true });
+    const progressContainer = document.getElementById('progressContainer');
+    const progressBar = document.getElementById('progressBar');
+    const statusText = document.getElementById('statusText');
+    const pdfPreviewWrapper = document.getElementById('pdfPreviewWrapper');
+    const pdfPreview = document.getElementById('pdfPreview');
+    const pdfDownloadBtn = document.getElementById('pdfDownloadBtn');
+
+    let currentPdfBlob = null;
+    let currentPdfUrl = null;
+
+    // Toggle Input Groups
+    extractionMode.addEventListener('change', () => {
+      if (extractionMode.value === 'interval') {
+        intervalGroup.style.display = 'flex';
+        countGroup.style.display = 'none';
+      } else {
+        intervalGroup.style.display = 'none';
+        countGroup.style.display = 'flex';
+      }
+    });
+
+    videoInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        videoPlayer.src = URL.createObjectURL(file);
+        videoPlayer.style.display = 'block';
+        convertBtn.disabled = false;
+        pdfPreviewWrapper.style.display = 'none';
+        pdfDownloadBtn.style.display = 'none';
+        statusText.textContent = 'Video ready. Tap button to record frames to PDF.';
+      }
+    });
+
+    // Validates canvas content to verify it isn't an empty/blank frame
+    function isCanvasBlank(canvasContext, width, height) {
+      const pixelData = canvasContext.getImageData(0, 0, width, height).data;
+      let nonWhiteNonBlackPixelCount = 0;
+      
+      for (let i = 0; i < pixelData.length; i += 16) {
+        const r = pixelData[i];
+        const g = pixelData[i + 1];
+        const b = pixelData[i + 2];
+        const a = pixelData[i + 3];
+
+        if (a > 0 && !(r === 255 && g === 255 && b === 255) && !(r === 0 && g === 0 && b === 0)) {
+          nonWhiteNonBlackPixelCount++;
+        }
+      }
+      return nonWhiteNonBlackPixelCount === 0;
+    }
+
+    convertBtn.addEventListener('click', async () => {
+      if (!videoPlayer.src) return;
+
+      convertBtn.disabled = true;
+      pdfPreviewWrapper.style.display = 'none';
+      pdfDownloadBtn.style.display = 'none';
+      progressContainer.style.display = 'block';
+      progressBar.style.width = '0%';
+
+      if (currentPdfUrl) {
+        URL.revokeObjectURL(currentPdfUrl);
+      }
+
+      // Configuration Setup
+      const duration = videoPlayer.duration || 0;
+      if (duration === 0) {
+        statusText.textContent = "Error reading video length. Please try again.";
+        convertBtn.disabled = false;
+        return;
+      }
+
+      const format = pageSizeSelect.value;
+      const leftMarginInches = parseFloat(leftMarginInput.value) || 0;
+      const scaleMode = scaleModeSelect.value;
+      
+      let intervalSec;
+      let targetCaptureCount = Infinity; // Infinite by default, capped later if "count" mode
+
+      if (extractionMode.value === 'interval') {
+        intervalSec = Math.max(0.1, (parseFloat(intervalMsInput.value) || 1000) / 1000);
+      } else {
+        const targetCount = parseInt(totalFramesInput.value) || 10;
+        targetCaptureCount = targetCount;
+        intervalSec = duration / targetCount;
+      }
+
+      const imgWidth = videoPlayer.videoWidth || 640;
+      const imgHeight = videoPlayer.videoHeight || 360;
+      const orientation = imgWidth > imgHeight ? 'landscape' : 'portrait';
+
+      const pdf = new jsPDF({
+        orientation: orientation,
+        unit: 'mm',
+        format: format
+      });
+
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const leftMarginMm = leftMarginInches * 25.4;
+      const availableWidth = Math.max(10, pdfWidth - leftMarginMm);
+
+      const targetW = 600;
+      const targetH = Math.round(targetW * (pdfHeight / availableWidth));
+
+      hiddenCanvas.width = targetW;
+      hiddenCanvas.height = targetH;
+
+      // Reset video to start
+      videoPlayer.currentTime = 0;
+      videoPlayer.playbackRate = 1.0;
+
+      try {
+        await videoPlayer.play();
+      } catch (err) {
+        statusText.textContent = "Press play on video manually to start.";
+      }
+
+      let nextPageCaptureTime = 0;
+      let capturedPagesCount = 0;
+
+      statusText.textContent = "Recording playing video live...";
+
+      await new Promise((resolve) => {
+        const checkFrame = () => {
+          // Resolve if video is done or we have reached our max frame count target
+          if (videoPlayer.ended || (videoPlayer.paused && videoPlayer.currentTime >= videoPlayer.duration - 0.1) || capturedPagesCount >= targetCaptureCount) {
+            resolve();
+            return;
+          }
+
+          if (videoPlayer.currentTime >= nextPageCaptureTime) {
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, targetW, targetH);
+
+            if (scaleMode === 'cover') {
+              const targetAspect = availableWidth / pdfHeight;
+              const imgAspect = imgWidth / imgHeight;
+
+              let sWidth, sHeight, sx, sy;
+              if (imgAspect > targetAspect) {
+                sHeight = imgHeight;
+                sWidth = imgHeight * targetAspect;
+                sx = (imgWidth - sWidth) / 2;
+                sy = 0;
+              } else {
+                sWidth = imgWidth;
+                sHeight = imgWidth / targetAspect;
+                sx = 0;
+                sy = (imgHeight - sHeight) / 2;
+              }
+              ctx.drawImage(videoPlayer, sx, sy, sWidth, sHeight, 0, 0, targetW, targetH);
+            } else {
+              ctx.drawImage(videoPlayer, 0, 0, imgWidth, imgHeight, 0, 0, targetW, targetH);
+            }
+
+            // Confirm frame is rendered before saving to PDF
+            if (!isCanvasBlank(ctx, targetW, targetH)) {
+              if (capturedPagesCount > 0) {
+                pdf.addPage(format, orientation);
+              }
+              const processedImageData = hiddenCanvas.toDataURL('image/jpeg', 0.80);
+              pdf.addImage(processedImageData, 'JPEG', leftMarginMm, 0, availableWidth, pdfHeight);
+              capturedPagesCount++;
+            }
+
+            nextPageCaptureTime += intervalSec;
+            
+            const progress = (videoPlayer.currentTime / videoPlayer.duration) * 100;
+            progressBar.style.width = `${progress}%`;
+            
+            if (extractionMode.value === 'count') {
+               statusText.textContent = `Captured ${capturedPagesCount} of ${targetCaptureCount} frames...`;
+            } else {
+               statusText.textContent = `Captured ${capturedPagesCount} frames (${videoPlayer.currentTime.toFixed(1)}s)...`;
+            }
+          }
+
+          requestAnimationFrame(checkFrame);
+        };
+
+        requestAnimationFrame(checkFrame);
+      });
+
+      videoPlayer.pause();
+
+      if (capturedPagesCount === 0) {
+        statusText.textContent = "Failed to capture non-blank frames. Please try again.";
+        convertBtn.disabled = false;
+        return;
+      }
+
+      statusText.textContent = "Finalizing PDF document...";
+      currentPdfBlob = pdf.output('blob');
+      currentPdfUrl = URL.createObjectURL(currentPdfBlob);
+
+      pdfPreview.src = currentPdfUrl;
+      pdfPreviewWrapper.style.display = 'block';
+      pdfDownloadBtn.style.display = 'block';
+
+      statusText.textContent = `Complete! Generated PDF with ${capturedPagesCount} valid frames.`;
+      convertBtn.disabled = false;
+      setTimeout(() => { progressContainer.style.display = 'none'; }, 1000);
+    });
+
+    pdfDownloadBtn.addEventListener('click', () => {
+      if (!currentPdfBlob) return;
+      const a = document.createElement('a');
+      a.href = currentPdfUrl;
+      a.download = 'video_frames.pdf';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    });
+  </script>
+</body>
+</html>
